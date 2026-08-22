@@ -783,6 +783,115 @@ ORDER BY
   gross_revenue DESC;
 
 -- =============================================================================
+-- Customer revenue visibility
+-- Compares merchandise revenue linked to identified and unidentified customers.
+-- =============================================================================
+
+WITH eligible_transactions AS (
+  SELECT
+    CustomerID,
+    InvoiceNo,
+    StockCode,
+    Transaction_Type,
+    Line_Revenue
+  FROM `projectblue-500000.retail_revenue_risk.retail_transactions_analysis`
+  WHERE Transaction_Type IN (
+    'Merchandise Sale',
+    'Merchandise Cancellation'
+  )
+    AND NOT (
+      (
+        StockCode = '23166'
+        AND InvoiceNo IN ('541431', 'C541433')
+      )
+      OR
+      (
+        StockCode = '23843'
+        AND InvoiceNo IN ('581483', 'C581484')
+      )
+    )
+),
+
+customer_visibility AS (
+  SELECT
+    CASE
+      WHEN CustomerID IS NULL
+      THEN 'Unidentified Customer'
+      ELSE 'Identified Customer'
+    END AS customer_status,
+    COUNT(*) AS transaction_rows,
+    COUNTIF(
+      Transaction_Type = 'Merchandise Sale'
+    ) AS sale_rows,
+    COUNTIF(
+      Transaction_Type = 'Merchandise Cancellation'
+    ) AS cancellation_rows,
+    COUNT(
+      DISTINCT CASE
+        WHEN Transaction_Type = 'Merchandise Sale'
+        THEN InvoiceNo
+      END
+    ) AS purchase_invoices,
+    COUNT(
+      DISTINCT CustomerID
+    ) AS unique_customers,
+    SUM(
+      CASE
+        WHEN Transaction_Type = 'Merchandise Sale'
+        THEN Line_Revenue
+        ELSE 0
+      END
+    ) AS gross_revenue,
+    ABS(
+      SUM(
+        CASE
+          WHEN Transaction_Type = 'Merchandise Cancellation'
+          THEN Line_Revenue
+          ELSE 0
+        END
+      )
+    ) AS cancellation_value
+  FROM eligible_transactions
+  GROUP BY customer_status
+)
+
+SELECT
+  customer_status,
+  transaction_rows,
+  sale_rows,
+  cancellation_rows,
+  purchase_invoices,
+  unique_customers,
+  ROUND(
+    gross_revenue,
+    2
+  ) AS gross_revenue,
+  ROUND(
+    cancellation_value,
+    2
+  ) AS cancellation_value,
+  ROUND(
+    gross_revenue - cancellation_value,
+    2
+  ) AS net_revenue,
+  ROUND(
+    SAFE_DIVIDE(
+      cancellation_value,
+      gross_revenue
+    ) * 100,
+    2
+  ) AS cancellation_rate_percent,
+  ROUND(
+    SAFE_DIVIDE(
+      gross_revenue,
+      SUM(gross_revenue) OVER ()
+    ) * 100,
+    2
+  ) AS revenue_share_percent
+FROM customer_visibility
+ORDER BY gross_revenue DESC;
+
+-- =============================================================================
 -- Customer revenue concentration
 -- Excludes confirmed full-order reversals before ranking identified customers.
 -- =============================================================================
