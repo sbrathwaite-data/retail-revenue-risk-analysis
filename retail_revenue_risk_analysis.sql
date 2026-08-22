@@ -177,6 +177,114 @@ ORDER BY
   InvoiceDate;
 
 -- =============================================================================
+-- Adjusted revenue baseline
+-- Compares reported and adjusted merchandise revenue after full-order reversals.
+-- =============================================================================
+
+WITH flagged_transactions AS (
+  SELECT
+    Transaction_Type,
+    Line_Revenue,
+    CASE
+      WHEN StockCode = '23166'
+        AND InvoiceNo IN ('541431', 'C541433')
+        THEN TRUE
+      WHEN StockCode = '23843'
+        AND InvoiceNo IN ('581483', 'C581484')
+        THEN TRUE
+      ELSE FALSE
+    END AS is_full_reversal
+  FROM `projectblue-500000.retail_revenue_risk.retail_transactions_analysis`
+  WHERE Transaction_Type IN (
+    'Merchandise Sale',
+    'Merchandise Cancellation'
+  )
+),
+
+revenue_totals AS (
+  SELECT
+    SUM(
+      CASE
+        WHEN Transaction_Type = 'Merchandise Sale'
+        THEN Line_Revenue
+        ELSE 0
+      END
+    ) AS reported_gross_revenue,
+    ABS(
+      SUM(
+        CASE
+          WHEN Transaction_Type = 'Merchandise Cancellation'
+          THEN Line_Revenue
+          ELSE 0
+        END
+      )
+    ) AS reported_cancellation_value,
+    SUM(
+      CASE
+        WHEN Transaction_Type = 'Merchandise Sale'
+          AND is_full_reversal
+        THEN Line_Revenue
+        ELSE 0
+      END
+    ) AS reversal_value
+  FROM flagged_transactions
+)
+
+SELECT
+  result.metric,
+  ROUND(result.value, 2) AS value
+FROM revenue_totals
+CROSS JOIN UNNEST([
+  STRUCT(
+    'Reported gross merchandise revenue' AS metric,
+    reported_gross_revenue AS value
+  ),
+  STRUCT(
+    'Reported merchandise cancellation value' AS metric,
+    reported_cancellation_value AS value
+  ),
+  STRUCT(
+    'Reported cancellation rate (%)' AS metric,
+    SAFE_DIVIDE(
+      reported_cancellation_value,
+      reported_gross_revenue
+    ) * 100 AS value
+  ),
+  STRUCT(
+    'Confirmed full-order reversal value' AS metric,
+    reversal_value AS value
+  ),
+  STRUCT(
+    'Cancellation value attributable to reversals (%)' AS metric,
+    SAFE_DIVIDE(
+      reversal_value,
+      reported_cancellation_value
+    ) * 100 AS value
+  ),
+  STRUCT(
+    'Adjusted gross merchandise revenue' AS metric,
+    reported_gross_revenue - reversal_value AS value
+  ),
+  STRUCT(
+    'Adjusted merchandise cancellation value' AS metric,
+    reported_cancellation_value - reversal_value AS value
+  ),
+  STRUCT(
+    'Adjusted cancellation rate (%)' AS metric,
+    SAFE_DIVIDE(
+      reported_cancellation_value - reversal_value,
+      reported_gross_revenue - reversal_value
+    ) * 100 AS value
+  ),
+  STRUCT(
+    'Net merchandise revenue' AS metric,
+    reported_gross_revenue - reported_cancellation_value AS value
+  )
+]) AS result
+WITH OFFSET AS display_order
+ORDER BY display_order;
+
+-- =============================================================================
 -- Customer revenue concentration
 -- Excludes confirmed full-order reversals before ranking identified customers.
 -- =============================================================================
