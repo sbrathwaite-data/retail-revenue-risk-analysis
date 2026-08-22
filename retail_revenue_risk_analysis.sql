@@ -150,6 +150,33 @@ ORDER BY
   gross_revenue DESC;
 
 -- =============================================================================
+-- High-value cancellation investigation
+-- Identifies matched merchandise sales and exceptional full-order reversals.
+-- =============================================================================
+
+SELECT
+  StockCode,
+  Description,
+  InvoiceNo,
+  InvoiceDate,
+  CustomerID,
+  Country,
+  Transaction_Type,
+  Quantity,
+  UnitPrice,
+  ROUND(Line_Revenue, 2) AS line_revenue
+FROM `projectblue-500000.retail_revenue_risk.retail_transactions`
+WHERE StockCode IN ('23843', '23166')
+  AND Transaction_Type IN (
+    'Merchandise Sale',
+    'Merchandise Cancellation'
+  )
+  AND ABS(Line_Revenue) >= 10000
+ORDER BY
+  StockCode,
+  InvoiceDate;
+
+-- =============================================================================
 -- Customer revenue concentration
 -- Excludes confirmed full-order reversals before ranking identified customers.
 -- =============================================================================
