@@ -285,6 +285,117 @@ WITH OFFSET AS display_order
 ORDER BY display_order;
 
 -- =============================================================================
+-- Adjusted product revenue and cancellation risk
+-- Ranks product exposure after excluding confirmed full-order reversals.
+-- =============================================================================
+
+WITH eligible_transactions AS (
+  SELECT
+    StockCode,
+    Description,
+    InvoiceNo,
+    InvoiceDate,
+    CustomerID,
+    Transaction_Type,
+    Quantity,
+    Line_Revenue
+  FROM `projectblue-500000.retail_revenue_risk.retail_transactions_analysis`
+  WHERE Transaction_Type IN (
+    'Merchandise Sale',
+    'Merchandise Cancellation'
+  )
+    AND NOT (
+      (
+        StockCode = '23166'
+        AND InvoiceNo IN ('541431', 'C541433')
+      )
+      OR
+      (
+        StockCode = '23843'
+        AND InvoiceNo IN ('581483', 'C581484')
+      )
+    )
+),
+
+product_metrics AS (
+  SELECT
+    StockCode,
+    ARRAY_AGG(
+      Description
+      IGNORE NULLS
+      ORDER BY InvoiceDate DESC
+      LIMIT 1
+    )[SAFE_OFFSET(0)] AS product_description,
+    COUNTIF(
+      Transaction_Type = 'Merchandise Sale'
+    ) AS sale_rows,
+    COUNTIF(
+      Transaction_Type = 'Merchandise Cancellation'
+    ) AS cancellation_rows,
+    COUNT(
+      DISTINCT CASE
+        WHEN Transaction_Type = 'Merchandise Sale'
+        THEN CustomerID
+      END
+    ) AS unique_customers,
+    SUM(
+      CASE
+        WHEN Transaction_Type = 'Merchandise Sale'
+        THEN Quantity
+        ELSE 0
+      END
+    ) AS units_sold,
+    SUM(
+      CASE
+        WHEN Transaction_Type = 'Merchandise Cancellation'
+        THEN ABS(Quantity)
+        ELSE 0
+      END
+    ) AS units_canceled,
+    SUM(
+      CASE
+        WHEN Transaction_Type = 'Merchandise Sale'
+        THEN Line_Revenue
+        ELSE 0
+      END
+    ) AS gross_revenue,
+    ABS(
+      SUM(
+        CASE
+          WHEN Transaction_Type = 'Merchandise Cancellation'
+          THEN Line_Revenue
+          ELSE 0
+        END
+      )
+    ) AS cancellation_value
+  FROM eligible_transactions
+  GROUP BY StockCode
+)
+
+SELECT
+  StockCode,
+  product_description,
+  sale_rows,
+  cancellation_rows,
+  unique_customers,
+  units_sold,
+  units_canceled,
+  ROUND(gross_revenue, 2) AS gross_revenue,
+  ROUND(cancellation_value, 2) AS cancellation_value,
+  ROUND(
+    gross_revenue - cancellation_value,
+    2
+  ) AS net_revenue,
+  ROUND(
+    SAFE_DIVIDE(cancellation_value, gross_revenue) * 100,
+    2
+  ) AS cancellation_rate_percent
+FROM product_metrics
+ORDER BY
+  cancellation_value DESC,
+  gross_revenue DESC;
+
+-- =============================================================================
 -- Customer revenue concentration
 -- Excludes confirmed full-order reversals before ranking identified customers.
 -- =============================================================================
