@@ -2,6 +2,8 @@
 
 **A Retail Customer, Product, and Cancellation Analysis**
 
+**536,641 transactions · 38 countries · 4.64% reported cancellation → 2.30% adjusted**
+
 ## Business Question
 
 Where is retail merchandise revenue most exposed to cancellations, product losses, and customer concentration?
@@ -24,6 +26,12 @@ Where is retail merchandise revenue most exposed to cancellations, product losse
 ## Approach
 
 Preserved the original data, documented cleaning decisions, validated transaction classifications, investigated exceptional reversals, and built adjusted SQL analyses and an interactive Tableau dashboard.
+
+## Recommended Actions
+
+- Separate exceptional reversals from recurring cancellation risk.
+- Investigate products and customers with sustained cancellation exposure.
+- Improve customer ID capture and flag incomplete reporting periods.
 
 ## Tableau Dashboard
 
