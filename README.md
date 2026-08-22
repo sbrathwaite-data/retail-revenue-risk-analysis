@@ -39,4 +39,5 @@ Preserved the original data, documented cleaning decisions, validated transactio
 
 ## Project Files
 
+- [View the Google Sheets project workbook](https://docs.google.com/spreadsheets/d/1fE2Yhh9eNvAhrhVDwLLJx7w3vkz4OyU7MnxX_lQoSHo/edit?usp=sharing) — raw data, cleaned data, cleaning log, and executive summary.
 - [`retail_revenue_risk_analysis.sql`](retail_revenue_risk_analysis.sql) — 12 BigQuery queries covering validation, reversal investigation, revenue, products, customers, monthly trends, and country performance.
