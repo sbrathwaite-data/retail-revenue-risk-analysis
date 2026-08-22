@@ -3,6 +3,19 @@
 -- BigQuery Standard SQL
 
 -- =============================================================================
+-- Create analysis table
+-- Copies cleaned retail transactions into a dedicated BigQuery working table.
+-- =============================================================================
+
+CREATE OR REPLACE TABLE
+  `projectblue-500000.retail_revenue_risk.retail_transactions_analysis`
+AS
+
+SELECT
+  *
+FROM `projectblue-500000.retail_revenue_risk.retail_transactions`;
+
+-- =============================================================================
 -- Dataset validation
 -- Confirms row completeness, customer and country counts, and reporting dates.
 -- =============================================================================
