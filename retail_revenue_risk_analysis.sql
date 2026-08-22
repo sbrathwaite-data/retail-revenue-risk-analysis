@@ -509,6 +509,156 @@ ORDER BY
   gross_revenue DESC;
 
 -- =============================================================================
+-- Monthly revenue and cancellation trends
+-- Distinguishes complete months from partial reporting periods.
+-- =============================================================================
+
+WITH eligible_transactions AS (
+  SELECT
+    InvoiceNo,
+    InvoiceDate,
+    CustomerID,
+    StockCode,
+    Transaction_Type,
+    Line_Revenue
+  FROM `projectblue-500000.retail_revenue_risk.retail_transactions_analysis`
+  WHERE Transaction_Type IN (
+    'Merchandise Sale',
+    'Merchandise Cancellation'
+  )
+    AND NOT (
+      (
+        StockCode = '23166'
+        AND InvoiceNo IN ('541431', 'C541433')
+      )
+      OR
+      (
+        StockCode = '23843'
+        AND InvoiceNo IN ('581483', 'C581484')
+      )
+    )
+),
+
+date_bounds AS (
+  SELECT
+    MIN(DATE(InvoiceDate)) AS dataset_start,
+    MAX(DATE(InvoiceDate)) AS dataset_end
+  FROM eligible_transactions
+),
+
+monthly_metrics AS (
+  SELECT
+    DATE_TRUNC(
+      DATE(InvoiceDate),
+      MONTH
+    ) AS month_start,
+    COUNTIF(
+      Transaction_Type = 'Merchandise Sale'
+    ) AS sale_rows,
+    COUNTIF(
+      Transaction_Type = 'Merchandise Cancellation'
+    ) AS cancellation_rows,
+    COUNT(
+      DISTINCT CASE
+        WHEN Transaction_Type = 'Merchandise Sale'
+        THEN InvoiceNo
+      END
+    ) AS purchase_invoices,
+    COUNT(
+      DISTINCT CASE
+        WHEN Transaction_Type = 'Merchandise Cancellation'
+        THEN InvoiceNo
+      END
+    ) AS cancellation_invoices,
+    COUNT(
+      DISTINCT CustomerID
+    ) AS unique_identified_customers,
+    SUM(
+      CASE
+        WHEN Transaction_Type = 'Merchandise Sale'
+        THEN Line_Revenue
+        ELSE 0
+      END
+    ) AS gross_revenue,
+    ABS(
+      SUM(
+        CASE
+          WHEN Transaction_Type = 'Merchandise Cancellation'
+          THEN Line_Revenue
+          ELSE 0
+        END
+      )
+    ) AS cancellation_value
+  FROM eligible_transactions
+  GROUP BY month_start
+)
+
+SELECT
+  monthly.month_start,
+  FORMAT_DATE(
+    '%b %Y',
+    monthly.month_start
+  ) AS month_label,
+  CASE
+    WHEN (
+      monthly.month_start = DATE_TRUNC(
+        bounds.dataset_start,
+        MONTH
+      )
+      AND bounds.dataset_start > monthly.month_start
+    )
+    OR (
+      monthly.month_start = DATE_TRUNC(
+        bounds.dataset_end,
+        MONTH
+      )
+      AND bounds.dataset_end < LAST_DAY(
+        monthly.month_start
+      )
+    )
+    THEN 'Partial Month'
+    ELSE 'Complete Month'
+  END AS period_status,
+  DATE_DIFF(
+    LEAST(
+      LAST_DAY(monthly.month_start),
+      bounds.dataset_end
+    ),
+    GREATEST(
+      monthly.month_start,
+      bounds.dataset_start
+    ),
+    DAY
+  ) + 1 AS days_in_reporting_window,
+  monthly.sale_rows,
+  monthly.cancellation_rows,
+  monthly.purchase_invoices,
+  monthly.cancellation_invoices,
+  monthly.unique_identified_customers,
+  ROUND(
+    monthly.gross_revenue,
+    2
+  ) AS gross_revenue,
+  ROUND(
+    monthly.cancellation_value,
+    2
+  ) AS cancellation_value,
+  ROUND(
+    monthly.gross_revenue - monthly.cancellation_value,
+    2
+  ) AS net_revenue,
+  ROUND(
+    SAFE_DIVIDE(
+      monthly.cancellation_value,
+      monthly.gross_revenue
+    ) * 100,
+    2
+  ) AS cancellation_rate_percent
+FROM monthly_metrics AS monthly
+CROSS JOIN date_bounds AS bounds
+ORDER BY monthly.month_start;
+
+-- =============================================================================
 -- Customer revenue concentration
 -- Excludes confirmed full-order reversals before ranking identified customers.
 -- =============================================================================
