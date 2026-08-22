@@ -3,6 +3,21 @@
 -- BigQuery Standard SQL
 
 -- =============================================================================
+-- Dataset validation
+-- Confirms row completeness, customer and country counts, and reporting dates.
+-- =============================================================================
+
+SELECT
+  COUNT(*) AS total_rows,
+  COUNTIF(Transaction_Type IS NULL) AS missing_transaction_types,
+  COUNTIF(Line_Revenue IS NULL) AS missing_revenue_values,
+  COUNT(DISTINCT CustomerID) AS unique_customers,
+  COUNT(DISTINCT Country) AS unique_countries,
+  MIN(InvoiceDate) AS earliest_transaction,
+  MAX(InvoiceDate) AS latest_transaction
+FROM `projectblue-500000.retail_revenue_risk.retail_transactions`;
+
+-- =============================================================================
 -- Customer revenue concentration
 -- Excludes confirmed full-order reversals before ranking identified customers.
 -- =============================================================================
