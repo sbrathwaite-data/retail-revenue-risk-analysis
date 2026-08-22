@@ -25,6 +25,10 @@ Where is retail merchandise revenue most exposed to cancellations, product losse
 
 Preserved the original data, documented cleaning decisions, validated transaction classifications, investigated exceptional reversals, and built adjusted SQL analyses and an interactive Tableau dashboard.
 
+## Tableau Dashboard
+
+[View the interactive Tableau dashboard](https://public.tableau.com/views/WhereIsRevenueatRiskARetailCustomerProductandCancellationAnalysis/Dashboard1)
+
 ## Project Files
 
 - [`retail_revenue_risk_analysis.sql`](retail_revenue_risk_analysis.sql) — 12 BigQuery queries covering validation, reversal investigation, revenue, products, customers, monthly trends, and country performance.
