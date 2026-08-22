@@ -396,6 +396,119 @@ ORDER BY
   gross_revenue DESC;
 
 -- =============================================================================
+-- Customer revenue and cancellation risk
+-- Evaluates identified customer exposure after excluding full-order reversals.
+-- =============================================================================
+
+WITH eligible_transactions AS (
+  SELECT
+    CustomerID,
+    Country,
+    InvoiceNo,
+    InvoiceDate,
+    StockCode,
+    Transaction_Type,
+    Line_Revenue
+  FROM `projectblue-500000.retail_revenue_risk.retail_transactions_analysis`
+  WHERE CustomerID IS NOT NULL
+    AND Transaction_Type IN (
+      'Merchandise Sale',
+      'Merchandise Cancellation'
+    )
+    AND NOT (
+      (
+        StockCode = '23166'
+        AND InvoiceNo IN ('541431', 'C541433')
+      )
+      OR
+      (
+        StockCode = '23843'
+        AND InvoiceNo IN ('581483', 'C581484')
+      )
+    )
+),
+
+customer_metrics AS (
+  SELECT
+    CustomerID,
+    ARRAY_AGG(
+      Country
+      IGNORE NULLS
+      ORDER BY InvoiceDate DESC
+      LIMIT 1
+    )[SAFE_OFFSET(0)] AS country,
+    COUNT(
+      DISTINCT CASE
+        WHEN Transaction_Type = 'Merchandise Sale'
+        THEN InvoiceNo
+      END
+    ) AS purchase_invoices,
+    COUNT(
+      DISTINCT CASE
+        WHEN Transaction_Type = 'Merchandise Cancellation'
+        THEN InvoiceNo
+      END
+    ) AS cancellation_invoices,
+    COUNTIF(
+      Transaction_Type = 'Merchandise Sale'
+    ) AS purchase_rows,
+    COUNTIF(
+      Transaction_Type = 'Merchandise Cancellation'
+    ) AS cancellation_rows,
+    COUNT(
+      DISTINCT CASE
+        WHEN Transaction_Type = 'Merchandise Sale'
+        THEN StockCode
+      END
+    ) AS products_purchased,
+    SUM(
+      CASE
+        WHEN Transaction_Type = 'Merchandise Sale'
+        THEN Line_Revenue
+        ELSE 0
+      END
+    ) AS gross_revenue,
+    ABS(
+      SUM(
+        CASE
+          WHEN Transaction_Type = 'Merchandise Cancellation'
+          THEN Line_Revenue
+          ELSE 0
+        END
+      )
+    ) AS cancellation_value,
+    MIN(InvoiceDate) AS first_transaction,
+    MAX(InvoiceDate) AS latest_transaction
+  FROM eligible_transactions
+  GROUP BY CustomerID
+)
+
+SELECT
+  CustomerID,
+  country,
+  purchase_invoices,
+  cancellation_invoices,
+  purchase_rows,
+  cancellation_rows,
+  products_purchased,
+  ROUND(gross_revenue, 2) AS gross_revenue,
+  ROUND(cancellation_value, 2) AS cancellation_value,
+  ROUND(
+    gross_revenue - cancellation_value,
+    2
+  ) AS net_revenue,
+  ROUND(
+    SAFE_DIVIDE(cancellation_value, gross_revenue) * 100,
+    2
+  ) AS cancellation_rate_percent,
+  first_transaction,
+  latest_transaction
+FROM customer_metrics
+ORDER BY
+  cancellation_value DESC,
+  gross_revenue DESC;
+
+-- =============================================================================
 -- Customer revenue concentration
 -- Excludes confirmed full-order reversals before ranking identified customers.
 -- =============================================================================
