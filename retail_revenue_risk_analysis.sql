@@ -18,6 +18,51 @@ SELECT
 FROM `projectblue-500000.retail_revenue_risk.retail_transactions`;
 
 -- =============================================================================
+-- Reported revenue baseline
+-- Measures merchandise sales, cancellations, net revenue, and cancellation risk.
+-- =============================================================================
+
+WITH merchandise_revenue AS (
+  SELECT
+    COUNTIF(Transaction_Type = 'Merchandise Sale')
+      AS merchandise_sale_rows,
+    COUNTIF(Transaction_Type = 'Merchandise Cancellation')
+      AS merchandise_cancellation_rows,
+    SUM(
+      CASE
+        WHEN Transaction_Type = 'Merchandise Sale'
+        THEN Line_Revenue
+        ELSE 0
+      END
+    ) AS gross_merchandise_revenue,
+    ABS(
+      SUM(
+        CASE
+          WHEN Transaction_Type = 'Merchandise Cancellation'
+          THEN Line_Revenue
+          ELSE 0
+        END
+      )
+    ) AS cancellation_value
+  FROM `projectblue-500000.retail_revenue_risk.retail_transactions`
+)
+
+SELECT
+  merchandise_sale_rows,
+  merchandise_cancellation_rows,
+  ROUND(gross_merchandise_revenue, 2)
+    AS gross_merchandise_revenue,
+  ROUND(cancellation_value, 2)
+    AS cancellation_value,
+  ROUND(gross_merchandise_revenue - cancellation_value, 2)
+    AS net_merchandise_revenue,
+  ROUND(
+    SAFE_DIVIDE(cancellation_value, gross_merchandise_revenue) * 100,
+    2
+  ) AS cancellation_rate_percent
+FROM merchandise_revenue;
+
+-- =============================================================================
 -- Customer revenue concentration
 -- Excludes confirmed full-order reversals before ranking identified customers.
 -- =============================================================================
