@@ -659,6 +659,130 @@ CROSS JOIN date_bounds AS bounds
 ORDER BY monthly.month_start;
 
 -- =============================================================================
+-- Country revenue and cancellation performance
+-- Compares geographic revenue exposure, cancellation risk, and customer coverage.
+-- =============================================================================
+
+WITH eligible_transactions AS (
+  SELECT
+    Country,
+    CustomerID,
+    InvoiceNo,
+    StockCode,
+    Transaction_Type,
+    Line_Revenue
+  FROM `projectblue-500000.retail_revenue_risk.retail_transactions_analysis`
+  WHERE Transaction_Type IN (
+    'Merchandise Sale',
+    'Merchandise Cancellation'
+  )
+    AND NOT (
+      (
+        StockCode = '23166'
+        AND InvoiceNo IN ('541431', 'C541433')
+      )
+      OR
+      (
+        StockCode = '23843'
+        AND InvoiceNo IN ('581483', 'C581484')
+      )
+    )
+),
+
+country_metrics AS (
+  SELECT
+    Country,
+    COUNT(
+      DISTINCT CustomerID
+    ) AS unique_identified_customers,
+    COUNT(
+      DISTINCT CASE
+        WHEN Transaction_Type = 'Merchandise Sale'
+        THEN InvoiceNo
+      END
+    ) AS purchase_invoices,
+    COUNT(
+      DISTINCT CASE
+        WHEN Transaction_Type = 'Merchandise Cancellation'
+        THEN InvoiceNo
+      END
+    ) AS cancellation_invoices,
+    COUNTIF(
+      Transaction_Type = 'Merchandise Sale'
+    ) AS sale_rows,
+    COUNTIF(
+      Transaction_Type = 'Merchandise Cancellation'
+    ) AS cancellation_rows,
+    COUNTIF(
+      CustomerID IS NOT NULL
+    ) AS identified_transaction_rows,
+    COUNT(*) AS total_transaction_rows,
+    SUM(
+      CASE
+        WHEN Transaction_Type = 'Merchandise Sale'
+        THEN Line_Revenue
+        ELSE 0
+      END
+    ) AS gross_revenue,
+    ABS(
+      SUM(
+        CASE
+          WHEN Transaction_Type = 'Merchandise Cancellation'
+          THEN Line_Revenue
+          ELSE 0
+        END
+      )
+    ) AS cancellation_value
+  FROM eligible_transactions
+  GROUP BY Country
+)
+
+SELECT
+  Country,
+  unique_identified_customers,
+  purchase_invoices,
+  cancellation_invoices,
+  sale_rows,
+  cancellation_rows,
+  ROUND(
+    gross_revenue,
+    2
+  ) AS gross_revenue,
+  ROUND(
+    cancellation_value,
+    2
+  ) AS cancellation_value,
+  ROUND(
+    gross_revenue - cancellation_value,
+    2
+  ) AS net_revenue,
+  ROUND(
+    SAFE_DIVIDE(
+      cancellation_value,
+      gross_revenue
+    ) * 100,
+    2
+  ) AS cancellation_rate_percent,
+  ROUND(
+    SAFE_DIVIDE(
+      gross_revenue,
+      SUM(gross_revenue) OVER ()
+    ) * 100,
+    2
+  ) AS revenue_share_percent,
+  ROUND(
+    SAFE_DIVIDE(
+      identified_transaction_rows,
+      total_transaction_rows
+    ) * 100,
+    2
+  ) AS customer_id_coverage_percent
+FROM country_metrics
+ORDER BY
+  cancellation_value DESC,
+  gross_revenue DESC;
+
+-- =============================================================================
 -- Customer revenue concentration
 -- Excludes confirmed full-order reversals before ranking identified customers.
 -- =============================================================================
